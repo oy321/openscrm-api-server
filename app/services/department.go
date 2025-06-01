@@ -1,12 +1,13 @@
 package services
 
 import (
-	"github.com/pkg/errors"
 	"openscrm/app/entities"
 	"openscrm/app/models"
 	"openscrm/common/id_generator"
 	"openscrm/common/log"
 	"openscrm/common/we_work"
+
+	"github.com/pkg/errors"
 )
 
 type Department struct {
@@ -44,6 +45,7 @@ func (d Department) Sync(extCorpID string) error {
 		department.ID = id_generator.StringID()
 		department.ExtCorpID = extCorpID
 		department.ExtID = dept.ID
+		// Note: SimpleListAllDepartments doesn't include names, we'll get them from staff data
 		department.ExtParentID = dept.ParentID
 		department.Order = dept.Order
 		departments = append(departments, department)

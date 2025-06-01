@@ -2,12 +2,6 @@ package models
 
 import (
 	"fmt"
-	"github.com/jinzhu/copier"
-	"github.com/pkg/errors"
-	redis2 "github.com/redis/go-redis/v9"
-	"golang.org/x/net/context"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	"openscrm/app/constants"
 	"openscrm/app/requests"
 	"openscrm/common/app"
@@ -17,6 +11,13 @@ import (
 	"openscrm/conf"
 	"os"
 	"time"
+
+	"github.com/jinzhu/copier"
+	"github.com/pkg/errors"
+	redis2 "github.com/redis/go-redis/v9"
+	"golang.org/x/net/context"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type Staff struct {
@@ -443,11 +444,10 @@ func (s *Staff) CachedGetCustomerSummary(extStaffID, extCorpID string) (cs Custo
 func (s *Staff) GetCustomerSummary(extStaffID string, extCorpID string) (cs CustomerSummary, err error) {
 	todayStart := util.Today()
 	todayEnd := todayStart.Add(24 * time.Hour)
-	//db := DB.Model(&CorpSetting{}).Where("ext_corp_id = ?", extCorpID)
-	//err = db.Select("corp_name").Find(&cs.CorpName).Error
-	//if err != nil {
-	//	return
-	//}
+
+	// Get corp name from config - for now we'll use a placeholder
+	// In a real implementation, this could be fetched from WeCom API or stored in config
+	cs.CorpName = "融合微服集团" // This should match your actual company name
 
 	db := DB.Model(&Staff{}).Where("ext_corp_id = ?", extCorpID)
 	err = db.Count(&cs.TotalStaffsNum).Error
