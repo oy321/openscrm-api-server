@@ -4,7 +4,6 @@ import (
 	"bytes"
 	errors2 "errors"
 	"fmt"
-	"github.com/gogf/gf/crypto/gmd5"
 	"net/url"
 	"openscrm/app/constants"
 	"openscrm/app/entities"
@@ -25,6 +24,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gogf/gf/crypto/gmd5"
 
 	"github.com/gogf/gf/os/gfile"
 	"github.com/gogf/gf/os/grpool"
@@ -336,6 +337,20 @@ func (o CustomerService) Query(
 		err = errors.WithStack(err)
 		return
 	}
+
+	// Debug: log the customer query results to help diagnose the frontend display issue
+	log.Sugar.Infow("Customer query results",
+		"total", total,
+		"customerCount", len(customers),
+		"extCorpID", extCorpID)
+
+	if len(customers) > 0 {
+		// Log a sample customer record to check data structure
+		log.Sugar.Debugw("Sample customer data",
+			"customer", customers[0],
+			"staffRelationsCount", len(customers[0].Staffs))
+	}
+
 	return
 }
 

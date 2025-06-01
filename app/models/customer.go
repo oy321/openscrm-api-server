@@ -1,12 +1,14 @@
 package models
 
 import (
+	"openscrm/app/requests"
+	app "openscrm/common/app"
+	"openscrm/common/log"
+	"time"
+
 	"github.com/pkg/errors"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"openscrm/app/requests"
-	app "openscrm/common/app"
-	"time"
 )
 
 type CustomerExportItem struct {
@@ -223,10 +225,11 @@ func (o Customer) Query(
 
 	var customers []*Customer
 
+	// First try to get customers with staff relationships
 	db := DB.Table("customer").
 		Joins("left join customer_staff cs on customer.ext_id = cs.ext_customer_id").
 		Joins("left join customer_staff_tag cst on cst.customer_staff_id = cs.id").
-		Where("cs.ext_corp_id = ?", extCorpID)
+		Where("customer.ext_corp_id = ? OR cs.ext_corp_id = ?", extCorpID, extCorpID)
 
 	if req.Name != "" {
 		db = db.Where("customer.name like ?", req.Name+"%")
@@ -241,10 +244,9 @@ func (o Customer) Query(
 		db = db.Where("cs.ext_staff_id in (?)", req.ExtStaffIDs)
 	}
 	if req.StartTime != "" {
-		db = db.Where("createtime between ? and ?", req.StartTime, req.EndTime)
+		db = db.Where("cs.createtime between ? and ?", req.StartTime, req.EndTime)
 	}
 	if len(req.ExtTagIDs) > 0 {
-		//db = db.Where("json_contains(cs.ext_tag_ids, json_array(?))", customerStaff.ExtTagIDs)
 		db = db.Where("cst.ext_tag_id in (?)", req.ExtTagIDs)
 	}
 	if req.ChannelType > 0 {
@@ -257,9 +259,13 @@ func (o Customer) Query(
 	}
 
 	var total int64
-	if err := db.Distinct("customer.id").Count(&total).Error; err != nil {
-		return nil, 0, err
+	countErr := db.Distinct("customer.id").Count(&total).Error
+	if countErr != nil {
+		log.Sugar.Errorw("Customer count query failed", "error", countErr, "extCorpID", extCorpID)
+		return nil, 0, countErr
 	}
+
+	log.Sugar.Infow("Customer query count", "total", total, "extCorpID", extCorpID)
 
 	pager.SetDefault()
 	db = db.Offset(pager.GetOffset()).Limit(pager.GetLimit())
@@ -271,8 +277,51 @@ func (o Customer) Query(
 		Find(&customers).Error
 	if err != nil {
 		err = errors.WithStack(err)
+		log.Sugar.Errorw("Customer query failed", "error", err, "extCorpID", extCorpID)
 		return nil, 0, err
 	}
+
+	log.Sugar.Infow("Customer query completed",
+		"foundCustomers", len(customers),
+		"totalCount", total,
+		"extCorpID", extCorpID)
+
+	// If no customers found with relationships, try direct customer query
+	if total == 0 {
+		log.Sugar.Infow("No customers found with relationships, trying direct customer query", "extCorpID", extCorpID)
+
+		directDB := DB.Where("ext_corp_id = ?", extCorpID)
+		if req.Name != "" {
+			directDB = directDB.Where("name like ?", req.Name+"%")
+		}
+		if req.Gender != 0 {
+			directDB = directDB.Where("gender = ?", req.Gender)
+		}
+		if req.Type != 0 {
+			directDB = directDB.Where("type = ?", req.Type)
+		}
+
+		var directTotal int64
+		if err := directDB.Model(&Customer{}).Count(&directTotal).Error; err != nil {
+			log.Sugar.Errorw("Direct customer count failed", "error", err)
+		} else {
+			log.Sugar.Infow("Direct customer query found", "total", directTotal, "extCorpID", extCorpID)
+
+			if directTotal > 0 {
+				directDB = directDB.Offset(pager.GetOffset()).Limit(pager.GetLimit()).
+					Preload("Staffs").
+					Preload("Staffs.CustomerStaffTags")
+
+				if err := directDB.Find(&customers).Error; err != nil {
+					log.Sugar.Errorw("Direct customer query failed", "error", err)
+				} else {
+					total = directTotal
+					log.Sugar.Infow("Using direct customer query results", "count", len(customers))
+				}
+			}
+		}
+	}
+
 	return customers, total, nil
 }
 
