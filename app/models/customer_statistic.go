@@ -1,9 +1,6 @@
 package models
 
 import (
-	"github.com/pkg/errors"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	"openscrm/app/constants"
 	"openscrm/app/requests"
 	"openscrm/common/ecode"
@@ -11,6 +8,10 @@ import (
 	log2 "openscrm/common/log"
 	"openscrm/conf"
 	"time"
+
+	"github.com/pkg/errors"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // CustomerStatistic 按天统计客户数量
@@ -44,13 +45,13 @@ func (s CustomerStatistic) Query(req requests.QueryCustomerStatisticReq, extCorp
 	if len(req.ExtStaffIDs) == 0 {
 		switch req.StatisticType {
 		case constants.StatisticTypeTotal:
-			err = db.Select("sum(total_customer_num) as number, date").Group("ext_staff_id,date").Order("date").Find(&res).Error
+			err = db.Select("sum(total_customer_num) as number, date").Group("date").Order("date").Find(&res).Error
 		case constants.StatisticTypeIncrease:
-			err = db.Select("sum(increase_customer_num) as number, date").Group("ext_staff_id,date").Order("date").Find(&res).Error
+			err = db.Select("sum(increase_customer_num) as number, date").Group("date").Order("date").Find(&res).Error
 		case constants.StatisticTypeDecrease:
-			err = db.Select("sum(decrease_customer_num) as number, date").Group("ext_staff_id,date").Order("date").Find(&res).Error
+			err = db.Select("sum(decrease_customer_num) as number, date").Group("date").Order("date").Find(&res).Error
 		case constants.StatisticTypeNetIncrease:
-			err = db.Select("(sum(increase_customer_num) - sum(decrease_customer_num)) as number, date").Group("ext_staff_id,date").Order("date").Find(&res).Error
+			err = db.Select("(sum(increase_customer_num) - sum(decrease_customer_num)) as number, date").Group("date").Order("date").Find(&res).Error
 		default:
 			return
 		}

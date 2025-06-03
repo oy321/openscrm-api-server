@@ -268,17 +268,64 @@ func (o Customer) Query(
 	log.Sugar.Infow("Customer query count", "total", total, "extCorpID", extCorpID)
 
 	pager.SetDefault()
-	db = db.Offset(pager.GetOffset()).Limit(pager.GetLimit())
 
-	err := db.Preload("Staffs").
-		Preload("Staffs.CustomerStaffTags").
-		Select("customer.*").
-		Group("customer.ext_id").
-		Find(&customers).Error
+	// Create a new query for actual data retrieval to avoid GROUP BY issues
+	// Get distinct customer IDs first, then fetch full customer records
+	var customerIDs []string
+	idQuery := DB.Table("customer").
+		Joins("left join customer_staff cs on customer.ext_id = cs.ext_customer_id").
+		Joins("left join customer_staff_tag cst on cst.customer_staff_id = cs.id").
+		Where("customer.ext_corp_id = ? OR cs.ext_corp_id = ?", extCorpID, extCorpID)
+
+	// Apply the same filters to ID query
+	if req.Name != "" {
+		idQuery = idQuery.Where("customer.name like ?", req.Name+"%")
+	}
+	if req.Gender != 0 {
+		idQuery = idQuery.Where("customer.gender = ?", req.Gender)
+	}
+	if req.Type != 0 {
+		idQuery = idQuery.Where("customer.type = ?", req.Type)
+	}
+	if len(req.ExtStaffIDs) > 0 {
+		idQuery = idQuery.Where("cs.ext_staff_id in (?)", req.ExtStaffIDs)
+	}
+	if req.StartTime != "" {
+		idQuery = idQuery.Where("cs.createtime between ? and ?", req.StartTime, req.EndTime)
+	}
+	if len(req.ExtTagIDs) > 0 {
+		idQuery = idQuery.Where("cst.ext_tag_id in (?)", req.ExtTagIDs)
+	}
+	if req.ChannelType > 0 {
+		idQuery = idQuery.Where("cs.add_way = ?", req.ChannelType)
+	}
+	if req.OutFlowStatus == 1 {
+		idQuery = idQuery.Unscoped().Where("cs.deleted_at is not null")
+	} else if req.OutFlowStatus == 2 {
+		idQuery = idQuery.Where("cs.deleted_at is null")
+	}
+
+	idQuery = idQuery.Distinct().Select("customer.ext_id").
+		Offset(pager.GetOffset()).Limit(pager.GetLimit())
+
+	err := idQuery.Pluck("customer.ext_id", &customerIDs).Error
 	if err != nil {
 		err = errors.WithStack(err)
-		log.Sugar.Errorw("Customer query failed", "error", err, "extCorpID", extCorpID)
+		log.Sugar.Errorw("Customer ID query failed", "error", err, "extCorpID", extCorpID)
 		return nil, 0, err
+	}
+
+	// Now fetch full customer records for the IDs we found
+	if len(customerIDs) > 0 {
+		err = DB.Where("ext_id IN (?)", customerIDs).
+			Preload("Staffs").
+			Preload("Staffs.CustomerStaffTags").
+			Find(&customers).Error
+		if err != nil {
+			err = errors.WithStack(err)
+			log.Sugar.Errorw("Customer query failed", "error", err, "extCorpID", extCorpID)
+			return nil, 0, err
+		}
 	}
 
 	log.Sugar.Infow("Customer query completed",

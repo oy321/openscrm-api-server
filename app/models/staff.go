@@ -455,21 +455,30 @@ func (s *Staff) GetCustomerSummary(extStaffID string, extCorpID string) (cs Cust
 		return
 	}
 
-	db = DB.Model(&Customer{}).Where("ext_corp_id = ?", extCorpID)
-	err = db.Count(&cs.TotalCustomersNum).Error
+	// Count unique customers based on customer-staff relationships
+	err = DB.Model(&CustomerStaff{}).
+		Where("ext_corp_id = ?", extCorpID).
+		Distinct("ext_customer_id").
+		Count(&cs.TotalCustomersNum).Error
 	if err != nil {
 		return
 	}
 
-	db = DB.Model(&Customer{}).Where("ext_corp_id = ?", extCorpID).Where("created_at between ? and ?", todayStart, todayEnd)
-	err = db.Count(&cs.TodayCustomersIncrease).Error
+	// Count today's new customers based on customer-staff relationship creation time
+	err = DB.Model(&CustomerStaff{}).
+		Where("ext_corp_id = ?", extCorpID).
+		Where("created_at between ? and ?", todayStart, todayEnd).
+		Distinct("ext_customer_id").
+		Count(&cs.TodayCustomersIncrease).Error
 	if err != nil {
 		return
 	}
 
-	db = DB.Model(&CustomerStaffRelationHistory{}).
-		Where("ext_corp_id = ?", extCorpID).Where("customer_delete_staff_at between ? and ?", todayStart, todayEnd)
-	err = db.Count(&cs.TodayCustomersDecrease).Error
+	// Count today's customer losses from relation history
+	err = DB.Model(&CustomerStaffRelationHistory{}).
+		Where("ext_corp_id = ?", extCorpID).
+		Where("customer_delete_staff_at between ? and ?", todayStart, todayEnd).
+		Count(&cs.TodayCustomersDecrease).Error
 	if err != nil {
 		return
 	}
